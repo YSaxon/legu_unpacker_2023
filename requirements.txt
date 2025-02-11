@@ -1,7 +1,7 @@
 cffi==1.16.0
-cryptography==42.0.6
+cryptography==43.0.1
 kaitaistruct==0.10
-lief==0.14.1
+lief==0.15.0
 parse==1.6.5
 pycparser==2.22
 pycryptodomex==3.20.0
