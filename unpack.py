@@ -8,7 +8,6 @@
 # Original Author: Romain Thomas - @rh0main
 # Updated by: Yaakov Saxon - @ysaxon
 #################################################
-import sys
 import argparse
 import lief
 import io
@@ -16,6 +15,7 @@ from typing import Optional
 import zipfile
 import re
 from pyucl import ucl
+import zlib
 
 from legu_hashmap import LeguHashmap
 from legu_packed_file import LeguPackedFile
@@ -26,7 +26,7 @@ _LIBSHELL_RE = re.compile(r"libshell\w-([\d\.]+).so")
 MASK32 = (1 << 32) - 1
 
 
-    
+
 
 def dvmComputeUtf8Hash(clazz: str) -> int:
     """
@@ -117,8 +117,8 @@ def legu_unpack(apk_path: str):
 
     print(f"\n[+] Unpacking #{legu_main_data.nb_dex_files:d} packed methods ...")
     for idx, packedmethods in enumerate(legu_main_data.packed_bytecode):
-        print(f"[+] packed methods {idx:d} compressed_size:   0x{packedmethods.compressed_size:x}")
-        print(f"[+] packed methods {idx:d} uncompressed_size: 0x{packedmethods.uncompressed_size:x}")
+        print(f"[+] packed methods {idx:d} compressed size:   0x{packedmethods.compressed_size:x}")
+        print(f"[+] packed methods {idx:d} uncompressed size: 0x{packedmethods.uncompressed_size:x}")
         uncrypted = decryptor.decrypt(packedmethods.data, password)
         uncompressed = ucl.nrv2d_decompress(bytes(uncrypted), packedmethods.uncompressed_size + 0x400)
         packed_methods_files.append(io.BytesIO(bytes(uncompressed)))
@@ -158,6 +158,14 @@ def legu_unpack(apk_path: str):
                 unpacked_dex.seek(m.code_offset)
                 unpacked_dex.write(code)
 
+        unpacked_dex.seek(8)
+        old_checksum = int.from_bytes(unpacked_dex.read(4), byteorder='little')
+        new_checksum = zlib.adler32(unpacked_dex.read()) & 0xFFFFFFFF
+        print(f"[+] dex {idx:d} old checksum: 0x{old_checksum:x}")
+        print(f"[+] dex {idx:d} new checksum: 0x{new_checksum:x}")
+        unpacked_dex.seek(8)
+        unpacked_dex.write(new_checksum.to_bytes(4, byteorder='little'))
+
     with zipfile.ZipFile('unpacked.apk', 'w') as zf:
         for idx in range(legu_main_data.nb_dex_files):
             unpacked_dex = uncompressed_dex_files[idx]
@@ -167,7 +175,7 @@ def legu_unpack(apk_path: str):
             with zf.open(unpacked_path, "w") as zclasses:
                 zclasses.write(unpacked_dex.read())
 
-    print("[+] Unpacked APK: unpacked.apk")
+    print("\n[+] Unpacked APK: unpacked.apk")
 
 
 if __name__ == "__main__":
